@@ -175,15 +175,17 @@ def write_csv(frame, path, list_columns=()):
     export.to_csv(path, index=False, encoding='utf-8', date_format='%Y-%m-%d %H:%M:%S')
 
 
-def build_dataset(raw_dir, output_dir, *, require_test=True):
-    """Validate and publish a new version; existing versions are never overwritten.
+def build_dataset(raw_dir, output_dir, *, require_test=True, overwrite=False):
+    """Validate and publish a version; existing versions are kept unless overwrite=True.
 
     Set require_test=False explicitly to produce train/validation without dev.
     A present but incomplete or malformed dev source always raises an error.
+    With overwrite=True, an existing output_dir is replaced only after the new
+    build succeeds, so a failed run leaves the previous version intact.
     """
     raw_dir, output_dir = Path(raw_dir), Path(output_dir)
-    if output_dir.exists():
-        raise FileExistsError(f'{output_dir} already exists. Choose a new output version.')
+    if output_dir.exists() and not overwrite:
+        raise FileExistsError(f'{output_dir} already exists. Choose a new output version or pass overwrite=True.')
     has_dev = (raw_dir / 'MINDsmall_dev').exists()
     if require_test and not has_dev:
         raise FileNotFoundError('MINDsmall_dev is missing. Add it or explicitly set REQUIRE_TEST=False for a train/validation-only build.')
@@ -266,7 +268,14 @@ def build_dataset(raw_dir, output_dir, *, require_test=True):
             'preprocessing_sha256': sha256_file(__file__), 'source_files': source_files,
         }
         (staging / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
-        staging.rename(output_dir)
+        if output_dir.exists():
+            backup = Path(tempfile.mkdtemp(prefix='.replaced-', dir=output_dir.parent))
+            backup.rmdir()
+            output_dir.rename(backup)
+            staging.rename(output_dir)
+            shutil.rmtree(backup)
+        else:
+            staging.rename(output_dir)
     except Exception:
         shutil.rmtree(staging)
         raise
