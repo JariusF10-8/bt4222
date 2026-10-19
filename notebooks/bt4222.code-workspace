@@ -1,13 +1,9 @@
 {
-	"folders": [
-		{
-			"name": "bt4222",
-			"path": ".."
-		},
-		{
-			"name": "MINDsmall_train",
-			"path": "../../../../../../Downloads/MINDsmall_train"
-		}
-	],
-	"settings": {}
+  "folders": [
+    {
+      "name": "bt4222",
+      "path": ".."
+    }
+  ],
+  "settings": {}
 }
