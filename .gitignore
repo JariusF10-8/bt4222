@@ -216,3 +216,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Shared/generated project artifacts
+.DS_Store
+data/processed/
+outputs/*
+!outputs/.gitkeep
+figures/*
+!figures/.gitkeep
