@@ -223,7 +223,7 @@ stored elsewhere, configure this before setup:
 import os
 
 os.environ['MIND_RAW_DIR'] = (
-    '/content/drive/MyDrive/BT4222 Group Project/Microsoft MIND'
+    '/content/drive/MyDrive/BT4222 Group Project/data/raw'
 )
 ```
 
