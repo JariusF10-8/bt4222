@@ -1,10 +1,10 @@
-"""Article popularity and click-through features from interactions strictly before each impression.
+"""Popularity and click-through features using only interactions before each impression.
 
-Two modes share one implementation:
-- online: every logged exposure and click with time < t, from any partition.
-- frozen: training rows use time < t; rows in later partitions only see
-  interactions before their partition starts (the interim-report rule).
-The impression being scored never contributes, because it has time t.
+Each impression at time t gets a cutoff c <= t, and only interactions before c are counted.
+online: c = t.
+nightly: c = midnight at the start of the impression's day, in every partition.
+frozen: training rows use c = t, later partitions use midnight of their first day.
+Time windows (1, 6 and 24 hours) end at the cutoff.
 """
 import numpy as np
 import pandas as pd
@@ -47,13 +47,7 @@ def _codes(values, table):
 
 
 def build_exposure_log(partitions, subcategory_keys=None):
-    """Compact integer log with one row per candidate exposure, partitions in time order.
-
-    partitions maps name -> (events, candidates); rows keep each partition's
-    candidate order, so features can be re-attached to its candidates table.
-    subcategory_keys optionally maps name -> Series(news_id -> raw subcategory key).
-    Unknown subcategories use the key "" and fall back to the global rate.
-    """
+    """One row per candidate exposure, partitions in time order and each partition in candidate order."""
     tables = {"article": {}, "user": {}, "subcat": {"": 0}}
     frames, previous_end, event_offset, origin = [], None, 0, None
     for index, (name, (events, candidates)) in enumerate(partitions.items()):
@@ -86,8 +80,12 @@ def build_exposure_log(partitions, subcategory_keys=None):
         frames.append(frame)
         event_offset += len(events)
     log = pd.concat(frames, ignore_index=True)
-    log["t"] = ((log.pop("timestamp") - origin) // pd.Timedelta(seconds=1)).astype("int64")
+    stamps = log.pop("timestamp")
+    second = pd.Timedelta(seconds=1)
+    log["t"] = ((stamps - origin) // second).astype("int64")
+    log["day_start"] = ((stamps.dt.normalize() - origin) // second).clip(lower=0).astype("int64")
     log.attrs["partitions"] = list(partitions)
+    log.attrs["origin"] = str(pd.Timestamp(origin))
     return log
 
 
@@ -117,22 +115,22 @@ class _GroupStream:
         return seen, first
 
 
+MODES = ("online", "nightly", "frozen")
+
+
 def query_times(log, mode, training_partition=0):
-    require(mode in ("online", "frozen"), "mode must be 'online' or 'frozen'")
+    require(mode in MODES, f"mode must be one of {MODES}")
     t = log["t"].to_numpy()
     if mode == "online":
         return t
-    starts = log.groupby("partition", sort=False)["t"].transform("min").to_numpy()
+    if mode == "nightly":
+        return np.minimum(t, log["day_start"].to_numpy())
+    starts = log.groupby("partition", sort=False)["day_start"].transform("min").to_numpy()
     return np.where(log["partition"].to_numpy() == training_partition, t, np.minimum(t, starts))
 
 
 def compute_history_features(log, mode="online", prior_ctr=None, smoothing=None, training_partition=0):
-    """Return FEATURE_COLUMNS aligned with the rows of log.
-
-    prior_ctr defaults to the training-partition click rate, one constant.
-    Rates shrink towards that constant (subcategory, user) and articles shrink
-    towards their subcategory rate, so unseen articles fall back to their topic.
-    """
+    """Return FEATURE_COLUMNS aligned with the rows of log, with rates smoothed towards the training click rate."""
     smoothing = {**SMOOTHING, **(smoothing or {})}
     train = log["partition"].to_numpy() == training_partition
     require(train.any(), "The training partition is needed for the prior click rate")
@@ -156,7 +154,7 @@ def compute_history_features(log, mode="online", prior_ctr=None, smoothing=None,
     out["art_prior_exposures"], out["art_prior_clicks"] = exposures, hits
     out["art_prior_ctr"] = (hits + m * sub_rate) / (exposures + m)
     for h in WINDOW_HOURS:
-        out[f"art_exposures_{h}h"], out[f"art_clicks_{h}h"] = stream.counts(art, q, t - 3600 * h)
+        out[f"art_exposures_{h}h"], out[f"art_clicks_{h}h"] = stream.counts(art, q, q - 3600 * h)
     out["art_ctr_24h"] = (out["art_clicks_24h"] + m * sub_rate) / (out["art_exposures_24h"] + m)
     seen, first = stream.first_time(art, q)
     out["art_hours_since_first_exposure"] = np.where(seen, (t - first) / 3600.0, 0.0)
@@ -184,3 +182,15 @@ def compute_history_features(log, mode="online", prior_ctr=None, smoothing=None,
         dtype = "int8" if column in FLAG_COLUMNS else "float32" if column in FLOAT_COLUMNS else "int32"
         frame[column] = np.asarray(out[column]).astype(dtype)
     return frame
+
+
+def mix_by_impression(fresh, stale, events, stale_share=0.5, seed=42):
+    """Give each training impression either its fresh or its stale features; also return a per-row stale flag."""
+    require(len(fresh) == len(stale) == len(events), "fresh, stale and events must align")
+    require(list(fresh.columns) == list(stale.columns), "fresh and stale need the same columns")
+    _, inverse = np.unique(np.asarray(events), return_inverse=True)
+    stale_rows = np.random.default_rng(seed).random(inverse.max() + 1)[inverse] < stale_share
+    mixed = pd.DataFrame(index=fresh.index)
+    for column in fresh.columns:
+        mixed[column] = np.where(stale_rows, stale[column].to_numpy(), fresh[column].to_numpy()).astype(fresh[column].dtype)
+    return mixed, stale_rows
