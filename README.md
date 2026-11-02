@@ -16,6 +16,7 @@ appropriate for each model.
 | Preprocessing | [01_Data_Preprocessing.ipynb](notebooks/01_Data_Preprocessing.ipynb) | Parse, clean, validate and export the shared dataset |
 | Feature engineering | [Unified_Feature_Engineering.ipynb](notebooks/features/Unified_Feature_Engineering.ipynb) | Consolidate the group's engineered features and fitted transforms |
 | NeuMF | [NeuMF.ipynb](notebooks/models/NeuMF.ipynb) | Train and tune the ID-only baseline, with optional feature-fusion experiments |
+| Candidate-aware attention + MLP | [Candidate_Attention_MLP.ipynb](notebooks/models/Candidate_Attention_MLP.ipynb) | Advanced model 2: the candidate attends over the user's history; tuning, pooling ablations and attention diagnostics |
 
 Existing completed data bundles can be reused without rerunning preprocessing
 or feature engineering.
@@ -55,6 +56,7 @@ notebooks/
     ...                          Original member feature notebooks
   models/
     NeuMF.ipynb
+    Candidate_Attention_MLP.ipynb
     ...                          Other model notebooks
 
 tests/                           Small pipeline and feature-helper tests
@@ -311,6 +313,25 @@ Pooled history similarities do not replace the original sequence.
 
 Article matrices must be aligned using `news_index.csv` or the accompanying
 article IDs.
+
+### Candidate-aware attention + MLP (advanced model 2)
+
+Open `notebooks/models/Candidate_Attention_MLP.ipynb` in Colab. It reads the
+same `PROCESSED_VERSION` and `FEATURE_VERSION` as NeuMF and writes runs to
+`outputs/models/candidate_attention/<RUN_NAME>/`. On a 2-core CPU the full
+notebook took about 1 hour 50 minutes; a GPU runtime should be faster. No repository ZIP or raw files are needed.
+
+The model encodes every article (TF-IDF reduced by a training-fitted SVD, the
+uniform entity vector, category and subcategory embeddings), uses each
+candidate as the attention query over the most recent supplied history clicks,
+and scores `[history vector; candidate; product; compact features]` with an
+MLP. `pooling='global'` and `pooling='mean'` swap only the aggregation step.
+They give the controlled comparison with an NRMS-style user vector and with
+the feature-based MLP's mean pooling. The compact engineered features are the
+same predeclared set as the NeuMF fusion studies.
+
+Keep `RUN_ABLATIONS=True` and `RUN_EXTRA_SEEDS=True` for the report. As with
+NeuMF, set `EVALUATE_TEST=True` only immediately before the final cell.
 
 ## Loading data for features and models
 
