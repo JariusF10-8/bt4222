@@ -224,3 +224,6 @@ outputs/*
 !outputs/.gitkeep
 figures/*
 !figures/.gitkeep
+
+# Large generated dataset (exceeds GitHub 100MB limit)
+data/unified_v1/
