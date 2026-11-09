@@ -1,133 +1,100 @@
-# BT4222 Group 2 — MIND news recommendation
+# BT4222 Group 2: MIND news recommendation
 
-The project follows one shared workflow:
+We rank every candidate article in a MIND-small impression by its predicted click
+chance. Training uses 9 to 12 November 2019, validation uses 13 to 14 November,
+and the test set is the `MINDsmall_dev` log of 15 November, scored once.
 
-1. **Preprocessing:** produce the canonical CSV dataset and temporal partitions.
-2. **Feature engineering:** generate the unified article, impression and candidate features.
-3. **Modelling:** train baseline and advanced models using the agreed data versions.
+## Pipeline
 
-Teammates reuse the same preprocessing and feature bundles, selecting the inputs
-appropriate for each model.
+Run the notebooks in this order. Each one starts with a markdown section that
+explains its purpose, inputs and outputs, and every notebook keeps its saved
+output cells. In each model notebook, a note marked **Final test result** next
+to the test cell gives the numbers used in the report.
 
-## Main notebooks
+| Step | Notebook | What it does | Main output |
+|---|---|---|---|
+| 01 | [01_Dataset_EDA.ipynb](notebooks/eda/01_Dataset_EDA.ipynb) | Data quality, sparsity and time patterns in the raw files | EDA tables and plots |
+| 02 | [02_Data_Preprocessing.ipynb](notebooks/02_Data_Preprocessing.ipynb) | Parse, clean, validate and split the raw MIND files | `data/processed/v2` |
+| 03 | [03_Unified_Feature_Engineering.ipynb](notebooks/features/03_Unified_Feature_Engineering.ipynb) | Build the 185 shared features with leakage checks | `outputs/features/unified_v1` |
+| 04a | [04a_NeuMF.ipynb](notebooks/models/04a_NeuMF.ipynb) | Baseline: ID-only NeuMF | test metrics |
+| 04b | [04b_CBF.ipynb](notebooks/models/04b_CBF.ipynb) | Baseline: content-based filtering with TF-IDF | test metrics |
+| 04c | [04c_UBCF.ipynb](notebooks/models/04c_UBCF.ipynb) | Baseline: user-based collaborative filtering | test metrics |
+| 05a | [05a_feature-based_MLP.ipynb](notebooks/models/05a_feature-based_MLP.ipynb) | Advanced model 1: mean-pooled history and engineered features | test metrics |
+| 05b | [05b_Candidate_Attention_MLP.ipynb](notebooks/models/05b_Candidate_Attention_MLP.ipynb) | Advanced model 2: candidate-aware attention over the history | test metrics |
 
-| Stage | Notebook | Purpose |
-|---|---|---|
-| Preprocessing | [01_Data_Preprocessing.ipynb](notebooks/01_Data_Preprocessing.ipynb) | Parse, clean, validate and export the shared dataset |
-| Feature engineering | [Unified_Feature_Engineering.ipynb](notebooks/features/Unified_Feature_Engineering.ipynb) | Consolidate the group's engineered features and fitted transforms |
-| NeuMF | [NeuMF.ipynb](notebooks/models/NeuMF.ipynb) | Train and tune the ID-only baseline, with optional feature-fusion experiments |
-| Candidate-aware attention + MLP | [Candidate_Attention_MLP.ipynb](notebooks/models/Candidate_Attention_MLP.ipynb) | Advanced model 2: the candidate attends over the user's history; tuning, pooling ablations and attention diagnostics |
+Supporting notebooks:
 
-Existing completed data bundles can be reused without rerunning preprocessing
-or feature engineering.
+- `notebooks/eda/Dataset_Overview.ipynb` and `notebooks/eda/Categorical_Text_Features.ipynb`: more EDA on the raw files, embeddings, categories and text.
+- `notebooks/eda/final_report_section_1_2_data_distributions.ipynb`: the figures in Section 1.2 of the report.
+- `notebooks/features/`: each member's original feature notebook and the CTR history check (see `notebooks/features/README.md`). Step 03 combines them into one bundle, so the two advanced models only read the Step 03 output.
 
-## Repository layout
+## Results on the test set
 
-Generated data and outputs are shown below for reference; they are ignored by Git.
+All models are fitted on the training days only, tuned on validation, and scored
+once on the complete test slates (73,152 impressions).
 
-```text
-data/
-  raw/
-    MINDsmall_train/             Original train TSVs and embedding vectors
-    MINDsmall_dev/               Official dev files for the complete handoff
-  data_dictionary.md             Shared preprocessing schema
-  processed/<version>/          Generated preprocessing bundle
-    train/{events,candidates,news}.csv
-    validation/{events,candidates,news}.csv
-    test/{events,candidates,news}.csv
-    manifest.json
-    data_dictionary.md
-    split_summary.csv
+| Model | Validation nDCG@10 | Test AUC | Test MRR | Test nDCG@5 | Test nDCG@10 |
+|---|---|---|---|---|---|
+| Random order | 0.2703 | 0.5000 | 0.2182 | 0.2229 | 0.2865 |
+| UBCF | 0.2764 | 0.4956 | 0.2165 | 0.2201 | 0.2828 |
+| CBF | 0.3591 | 0.5763 | 0.2762 | 0.2949 | 0.3569 |
+| NeuMF | 0.2993 | 0.5095 | 0.2223 | 0.2275 | 0.2912 |
+| Feature-based MLP | 0.3916 | 0.6367 | 0.2981 | 0.3300 | 0.3897 |
+| Candidate-aware attention MLP | 0.3942 | 0.6377 | 0.2997 | 0.3290 | 0.3925 |
 
-src/
-  preprocessing.py              Canonical parsing, cleaning, checks and exports
-  data_loading.py                Shared CSV loader and repository discovery
-  sampling.py                    Training negative sampling
-  ...                            Supporting feature helpers
+## Datasets and preprocessing artifacts
 
-notebooks/
-  01_Data_Preprocessing.ipynb
-  eda/
-    Dataset_Overview.ipynb
-    Dataset_EDA.ipynb
-    Categorical_Text_Features.ipynb
-  features/
-    Unified_Feature_Engineering.ipynb
-    ...                          Original member feature notebooks
-  models/
-    NeuMF.ipynb
-    Candidate_Attention_MLP.ipynb
-    ...                          Other model notebooks
+The raw MIND-small files are in this repository under `data/raw`. The cleaned
+dataset and the feature bundle are too large for GitHub (about 720 MB and
+860 MB, with single files over GitHub's 100 MB limit), so they are kept in our
+shared Google Drive folder:
 
-tests/                           Small pipeline and feature-helper tests
-figures/                         Generated report plots
-outputs/
-  features/<feature_version>/    Generated feature bundles
-  models/<model>/<run>/          Model checkpoints, metrics and predictions
+**Shared Drive folder** (add a shortcut to My Drive to run the notebooks): https://drive.google.com/drive/folders/1ZMBqrHA3wOM8h1DuBW04gypymjJiPmk1
 
-requirements.txt
-```
-
-The original root-level `MINDsmall_train` folder now lives under `data/raw`.
-Raw files are not modified. Existing versioned training files can remain in
-the repository; additional large data and generated bundles belong in the
-shared Drive.
-
-A present `MINDsmall_dev` directory must contain valid `behaviors.tsv` and
-`news.tsv` files. Do not create an empty dev folder as a placeholder.
-
-## GitHub and shared Drive
-
-GitHub stores:
-
-- Notebooks, source code, tests and requirements.
-- README instructions and feature definitions.
-- Small selected results tables and report figures.
-
-The shared Drive stores:
-
-- Complete preprocessed datasets.
-- Complete engineered-feature bundles and fitted transforms.
-- Model checkpoints, full predictions and experiment outputs.
-
-The repository ignores `data/processed/` and generated `outputs/`.
-Do not force-add these large folders to Git.
-
-Small copies of manifests, feature dictionaries and summaries may be committed
-under a documentation folder. Keep the originals with their complete Drive
-bundles.
-
-### Shared storage layout
-
-The Drive layout uses the same relative `data/` and `outputs/` paths as the
-repository:
+- Cleaned dataset, Step 02 output (`data/processed/v2`): https://drive.google.com/drive/folders/1FbcOhE7elk3nTzBw9QTGrf-SFXtU3ta9
+- Feature bundle, Step 03 output (`outputs/features/unified_v1`): https://drive.google.com/drive/folders/1VdCiWarnWEucRM9C6DAcSGVy5lZm6qsK
 
 ```text
 BT4222 Group Project/
-  data/
-    processed/v2/
-  outputs/
-    features/unified_v1/
-    models/
-      neumf/<timestamped run>/
-      <other model>/<run>/
+  data/processed/v2/                 Step 02 output, used by every model
+    train/ validation/ test/         events.csv, candidates.csv, news.csv
+    manifest.json                    checksums, split dates, row counts
+  outputs/features/unified_v1/       Step 03 output, used by both advanced models
+    train/ validation/ test/         article, impression and candidate features, TF-IDF and entity matrices
+    manifest.json                    feature dictionary, fitted vocabularies and checks
+  outputs/models/                    run folders with metrics, checkpoints and predictions
 ```
 
-The current shared version settings are:
+`v2` is the shared preprocessing build and `unified_v1` is the shared feature
+build. Running Step 02 or Step 03 yourself writes a new version folder (Step 02
+defaults to `v1` locally) and never overwrites an existing one.
 
-- Preprocessing: `v2`.
-- Engineered features: `unified_v1`.
+## How to run in Google Colab
 
-Update these instructions when the group adopts another version. Preprocessing
-and feature versions are independent: a new feature build can reuse the same
-preprocessing.
+1. Open the shared Drive link above and choose **Add shortcut to Drive**, then
+   place it in **My Drive**. Keep the folder name `BT4222 Group Project`,
+   because every notebook looks for `/content/drive/MyDrive/BT4222 Group Project`.
+2. Open a notebook from GitHub in Colab (each notebook has an **Open in Colab**
+   badge in its first cell).
+3. Run all cells and allow Drive access when asked. The setup cell prints the
+   input and output folders it uses.
 
-Keep each complete version folder together, including its manifests,
-dictionaries, fitted transforms, indexes and matrices.
+Steps 04 and 05 only need the Drive folder. Steps 01, 02 and 03 also need this
+repository's code and raw files. In Colab, run these two lines first:
 
-## Local setup and preprocessing
+```python
+!git clone https://github.com/JariusF10-8/bt4222.git /content/bt4222
+%cd /content/bt4222
+```
 
-From the repository root:
+Step 03 can instead ask you to upload the repository ZIP (**Code > Download ZIP**
+on GitHub).
+
+A GPU runtime is optional. On a 2-core CPU, CBF takes a few minutes, UBCF about
+10 minutes, and each advanced model about 2 hours including tuning and ablations.
+
+To run locally instead, copy `data/processed/v2` and `outputs/features/unified_v1`
+from Drive into the same paths in this repository, then:
 
 ```bash
 python3 -m venv .venv
@@ -136,306 +103,34 @@ pip install -r requirements.txt
 jupyter lab
 ```
 
-Open `notebooks/01_Data_Preprocessing.ipynb` and run its cells in order.
+## Rules every model follows
 
-The standalone preprocessing notebook defaults to:
+- Vocabularies, encoders, scalers and other fitted transforms use training data only.
+- Click-history features use only clicks from before the impression (`train_only` mode).
+- `num_clicked` and `num_unclicked` are removed because they leak the label.
+- Negative sampling (1 click and 4 non-clicks) is used only to train NeuMF and the two MLPs.
+  Validation and test always score the complete original slates.
+- Validation is used for tuning and early stopping. Test is read once, in the last cell.
+- No model is refitted on validation before testing.
 
-```python
-OUTPUT_DIR = PROJECT_ROOT / "data/processed/v1"
-REQUIRE_TEST = False
-```
-
-These are notebook defaults, separate from the group's shared `v2` handoff.
-
-When dev is absent, a partial build records `complete: false` and does not
-invent a test partition. For the complete group handoff, provide
-`MINDsmall_dev` and set `REQUIRE_TEST=True`.
-
-Existing output versions are never overwritten. Choose a new output directory
-for a fresh preprocessing build.
-
-### Temporal partitions
-
-- **Train:** November 9–12, 2019 from `MINDsmall_train`.
-- **Validation:** November 13–14, 2019 from `MINDsmall_train`.
-- **Final test:** all `MINDsmall_dev` events, verified to occur strictly later.
-
-Preprocessing retains complete candidate lists, click labels and source
-ordering. No negative sampling is applied during preprocessing.
-
-Histories remain in their supplied order. Missing histories and abstracts are
-retained with flags. Text is preserved, and basic whitespace word counts are
-added. Missing article metadata receives explicit placeholders.
-
-Invalid IDs, timestamps, candidate tokens, duplicate event/article IDs and
-malformed entity JSON stop the build. Candidate reconstruction and metadata
-joins are checked before export.
-
-The manifest records checksums, library versions, split dates and completeness.
-The output bundle is published only after the available partitions pass checks.
-
-## Unified feature engineering in Colab
-
-Open
-`notebooks/features/Unified_Feature_Engineering.ipynb`
-in Colab and edit the setup cell before running it.
-
-```python
-STORAGE_ROOT = Path(
-    '/content/drive/MyDrive/BT4222 Group Project'
-)
-
-PROCESSED_VERSION = 'v2'
-OUTPUT_VERSION = 'unified_v1'
-```
-
-The notebook constructs:
-
-```python
-PROCESSED_DIR = STORAGE_ROOT / 'data/processed' / PROCESSED_VERSION
-OUTPUT_DIR = STORAGE_ROOT / 'outputs/features' / OUTPUT_VERSION
-```
-
-For a fresh feature build, choose an unused `OUTPUT_VERSION`. If the agreed
-feature bundle already exists, models can read it directly.
-
-Existing preprocessing is reused. If its `manifest.json` is missing and
-`BUILD_PROCESSED_IF_MISSING=True`, the notebook builds preprocessing from the
-raw MIND data before constructing features.
-
-Use these settings for the shared group build:
-
-```python
-REQUIRE_TEST = True
-HISTORY_MODES = ('train_only',)
-ALLOW_HELDOUT_FEEDBACK = False
-```
-
-Leave optional feature diagnostics and prominence-grid experiments disabled
-unless needed.
-
-Run setup, allow Drive access and upload a current repository ZIP when
-prompted. Opening a notebook in Colab alone does not make the repository's
-`src/` or raw files available.
-
-Raw data defaults to the uploaded repository's `data/raw` folder. If it is
-stored elsewhere, configure this before setup:
-
-```python
-import os
-
-os.environ['MIND_RAW_DIR'] = (
-    '/content/drive/MyDrive/BT4222 Group Project/data/raw'
-)
-```
-
-`MIND_RAW_DIR` must contain the `MINDsmall_train` and `MINDsmall_dev` directories
-for a complete build, including the entity embedding files used by feature
-engineering.
-
-Check the printed paths, then run the remaining cells in order.
-
-### Feature bundle
-
-Each partition contains:
-
-| File | Purpose |
-|---|---|
-| `news_features.csv` | Article counts, metadata encodings and entity-related scalar features |
-| `event_features.csv` | Impression context, history summaries and missingness flags |
-| `candidate_features.csv.gz` | Candidate–history matching and time interaction features |
-| `candidate_history_train_only.csv.gz` | Historical popularity and CTR features |
-| `news_index.csv` | Article row order for the exported matrices |
-| `article_entity_vectors.npz` | Article entity-vector variants |
-| `article_entity_ids.csv.gz` | Type-specific entity IDs |
-| `tfidf_title_abstract.npz` | Sparse title/abstract TF-IDF representations |
-
-The root contains the manifest, feature dictionary, vocabularies, fitted
-vectorizer, summaries and merge documentation.
-
-Click labels remain in the preprocessing candidates table. Feature exports
-alone are insufficient to train a supervised model.
-
-## Modelling in Colab
-
-All teammates must use the agreed preprocessing version and, where applicable,
-the same feature bundle and historical-feedback policy.
-
-### NeuMF baseline
-
-Open `notebooks/models/NeuMF.ipynb` in Colab. A GPU is useful for tuning.
-
-Before running setup, configure:
-
-- `STORAGE_ROOT`: the shared project folder.
-- `PROCESSED_VERSION`: the existing complete preprocessing version.
-- `FEATURE_VERSION`: the completed feature version for optional fusion.
-
-The notebook constructs:
+## Repository layout
 
 ```text
-data/processed/<PROCESSED_VERSION>/
-outputs/features/<FEATURE_VERSION>/
-outputs/models/neumf/<RUN_NAME>/
+data/raw/                 original MIND-small train and dev files
+data/data_dictionary.md   column definitions for the processed CSVs
+notebooks/                the pipeline notebooks above
+src/                      shared preprocessing, loading, sampling and feature code
+tests/                    unit tests for the shared code
+figures/                  report figures (generated)
+outputs/                  generated features and model runs (kept in Drive)
+requirements.txt
 ```
 
-`RUN_NAME` is timestamped to keep studies separate.
-
-The complete preprocessing handoff must already exist. The standalone NeuMF
-notebook does not rebuild preprocessing and does not require a repository ZIP
-or raw embedding files.
-
-For the report's ID-only baseline, keep:
-
-```python
-RUN_FEATURE_FUSION = False
-RUN_ID_MASK_ABLATION = False
-RUN_EXTRA_SEEDS = False
-EVALUATE_TEST = False
-```
-
-The baseline uses `user_id` and `news_id` as categorical inputs and `label` as
-the training target. It learns its own ID embeddings. Engineered features enter
-only in the optional feature-fusion experiments.
-
-Run training and tuning using validation. After fixing the experiment choices,
-set `EVALUATE_TEST=True` immediately before the final evaluation cell.
-Do not rerun setup merely to enable final test evaluation.
-
-### Advanced models
-
-Choose the feature subset appropriate for each architecture. Models do not
-need to consume every exported feature.
-
-For LSTM or attention-based history encoders, use the ordered `history_ids`
-from preprocessing and map them to individual article representations.
-Pooled history similarities do not replace the original sequence.
-
-Article matrices must be aligned using `news_index.csv` or the accompanying
-article IDs.
-
-### Candidate-aware attention + MLP (advanced model 2)
-
-Open `notebooks/models/Candidate_Attention_MLP.ipynb` in Colab. It reads the
-same `PROCESSED_VERSION` and `FEATURE_VERSION` as NeuMF and writes runs to
-`outputs/models/candidate_attention/<RUN_NAME>/`. On a 2-core CPU the full
-notebook took about 1 hour 50 minutes; a GPU runtime should be faster. No repository ZIP or raw files are needed.
-
-The model encodes every article (TF-IDF reduced by a training-fitted SVD, the
-uniform entity vector, category and subcategory embeddings), uses each
-candidate as the attention query over the most recent supplied history clicks,
-and scores `[history vector; candidate; product; compact features]` with an
-MLP. `pooling='global'` and `pooling='mean'` swap only the aggregation step.
-They give the controlled comparison with an NRMS-style user vector and with
-the feature-based MLP's mean pooling. The compact engineered features are the
-same predeclared set as the NeuMF fusion studies.
-
-Keep `RUN_ABLATIONS=True` and `RUN_EXTRA_SEEDS=True` for the report. As with
-NeuMF, set `EVALUATE_TEST=True` only immediately before the final cell.
-
-## Loading data for features and models
-
-Download the agreed preprocessing version to `data/processed/v2`, or use its
-shared Drive location.
-
-From a notebook inside the repository:
-
-```python
-from pathlib import Path
-import sys
-
-PROJECT_ROOT = next(
-    p for p in [Path.cwd(), *Path.cwd().parents]
-    if (p / 'src/data_loading.py').is_file()
-)
-
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from src.data_loading import load_partition
-
-# Local copy:
-PROCESSED_DIR = PROJECT_ROOT / 'data/processed/v2'
-
-# Alternatively, after mounting Drive:
-# PROCESSED_DIR = Path(
-#     '/content/drive/MyDrive/BT4222 Group Project/data/processed/v2'
-# )
-
-events, candidates, news = load_partition(
-    'train', PROCESSED_DIR
-)
-```
-
-The loader preserves string IDs and literal text, restores timestamps and
-booleans, and decodes JSON histories/entity lists. Empty strings remain empty;
-use missingness flags.
-
-See [the data dictionary](data/data_dictionary.md).
-
-CSV quoting is handled normally on export/import. Raw TSV loading uses
-`csv.QUOTE_NONE` to preserve literal quotes in MIND text.
-
-For candidate-level features, join compact tables as needed:
-
-```python
-examples = candidates.merge(
-    events[['event_key', 'user_id', 'timestamp', 'history_length']],
-    on='event_key',
-    how='left',
-    validate='many_to_one',
-).merge(
-    news[['news_id', 'category', 'title_length', 'abstract_missing']],
-    on='news_id',
-    how='left',
-    validate='many_to_one',
-)
-
-y = examples.pop('label')
-```
-
-Section 12 of the unified feature notebook provides helpers for attaching
-exported features while preserving repeated sampled negatives.
-
-## Training and evaluation rules
-
-- Keep identifiers available for joins and grouped evaluation. Select model
-  inputs explicitly rather than passing every remaining column to a model.
-  ID-based models use separately encoded user/article IDs.
-- Keep `label` as the target. Never use current-impression `num_clicked` or
-  `num_unclicked` as predictors.
-- Fit vocabularies, encoders, scalers and other learned transforms on training
-  only. TF-IDF is fitted on training news excluding missing metadata.
-- Historical popularity and CTR features must exclude the current event and
-  future outcomes. Use the agreed `train_only` policy for shared comparisons.
-- Apply negative sampling only during model training. Feature construction uses
-  complete logs, and validation/test ranking uses complete original slates.
-- Preserve repeated replacement-sampled negatives when joining features.
-- Candidate position identifies source ordering; it is not assumed to be a
-  display-rank predictor.
-- Group ranking metrics by the complete impression, even when file-reading
-  chunks split an impression.
-- Use validation for tuning and early stopping. Keep test labels aside until
-  the model and experiment choices are fixed.
-- For the initial evaluation protocol, do not refit on validation before testing.
-
-Pretrained vectors remain in their raw folders and are loaded when needed.
-Entity embeddings join to Wikidata entity IDs, not news IDs. The unified
-pipeline uses entity vectors; relation embeddings alone do not supply a
-knowledge-graph edge table.
-
-## Checks
-
-Run the small repository tests without downloading the full dataset:
+## Tests
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-The tests cover preprocessing, sampling and supporting feature helpers,
-including temporal boundaries, preserved candidate identities and labels,
-CSV round trips, missing data, version handling and historical-feature logic.
-
-Also run the checks included in the unified feature and model notebooks.
-Repository helper tests do not replace validation of inline notebook code or
-the actual exported bundles.
+The tests cover preprocessing, time boundaries, sampling, category encoding,
+entity prominence and the click-history features.

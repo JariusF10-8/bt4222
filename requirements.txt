@@ -5,3 +5,5 @@ jupyterlab>=4,<5
 ipykernel>=6,<8
 scipy>=1.11,<2
 scikit-learn>=1.4,<2
+torch>=2.2
+lightgbm>=4
